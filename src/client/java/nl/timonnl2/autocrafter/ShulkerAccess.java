@@ -53,13 +53,18 @@ public final class ShulkerAccess {
         var support=mc.level.getBlockState(pos.below());
         if(!support.isCollisionShapeFullBlock(mc.level,pos.below()) || support.getBlock() instanceof net.minecraft.world.level.block.EntityBlock)errors.add("Use a solid, non-interactive support block below the staging position.");
         Vec3 player=mc.player.position(),center=Vec3.atCenterOf(pos);
-        if(mc.player.getBoundingBox().intersects(new AABB(pos)))errors.add("Step outside the staging block so the shulker can be placed.");
-        if(Math.hypot(player.x-center.x,player.z-center.z)>1.6 || Math.abs(player.y-pos.getY())>0.5)errors.add("Stand beside the shulker staging position, on the same floor, within 1.6 blocks of its centre.");
+        if(stagingStand()==null)errors.add("Leave a clear standing space beside Staging on a solid floor.");
         for(BlockPos nearby:BlockPos.betweenClosed(pos.offset(-1,-1,-1),pos.offset(1,1,1))) {
             var block=mc.level.getBlockState(nearby);
             if(!block.getFluidState().isEmpty() || block.getBlock() instanceof HopperBlock || block.is(Blocks.FIRE) || block.is(Blocks.SOUL_FIRE) || block.is(Blocks.CACTUS)) {errors.add("Keep fluids, hoppers, fire and cactus away from the staging area.");break;}
         }
         return errors;
+    }
+    private BlockPos stagingStand(){
+        if(app.config.staging==null)return null;
+        return java.util.stream.Stream.of(Direction.NORTH,Direction.SOUTH,Direction.EAST,Direction.WEST).map(d->app.config.staging.pos().relative(d))
+            .filter(p->mc.level.getBlockState(p).isAir()&&mc.level.getBlockState(p.above()).isAir()&&mc.level.getBlockState(p.below()).isCollisionShapeFullBlock(mc.level,p.below()))
+            .min(Comparator.comparingDouble(p->mc.player.position().distanceToSqr(Vec3.atBottomCenterOf(p)))).orElse(null);
     }
     public void ensure(StorageScanner.Container container,Runnable done,Consumer<String> onFailure) {
         requested=container!=null&&container.packed()?container:null;callback=done;failure=onFailure;
@@ -102,6 +107,7 @@ public final class ShulkerAccess {
     }
     public void tick() {
         if(!busy())return;
+        if(app.navigation.busy())return;
         if(mc.player==null || mc.level==null || mc.player.isDeadOrDying()){fail("Disconnected while handling a shulker. Recovery record preserved.");return;}
         if(++ticks>400){fail("Shulker operation timed out; inspect the recovery record before continuing.");return;}
         try {
@@ -129,17 +135,22 @@ public final class ShulkerAccess {
                     if(!confirmed())return;
                     if(!same(menuItems(),expectedHome) || !ItemStack.matches(mc.player.getInventory().getItem(hand),expectedBox)){fail("Server did not confirm taking the reserved shulker");return;}
                     mc.player.closeContainer();mc.gui.setScreen(null);mc.player.getInventory().setSelectedSlot(hand);
-                    persist("Shulker in inventory; about to place at staging position");state=Stage.PLACE;ticks=0;
+                    persist("Shulker in inventory; walking to staging position");state=Stage.PLACE;ticks=0;
+                    var stand=stagingStand();if(stand==null){fail("No standing space beside Staging");return;}
+                    app.navigation.walkTo(stand,()->{standingPosition=mc.player.position();standingYaw=mc.player.getYRot();});
                 }
                 case PLACE -> {
                     if(ticks<app.config.delayTicks)return;
                     var errors=stagingProblems();if(!errors.isEmpty()){fail(errors.getFirst());return;}
+                    if(!boxMatches(mc.player.getInventory().getItem(hand),expectedBox)){fail("Reserved shulker changed before placement");return;}
+                    mc.player.getInventory().setSelectedSlot(hand);
                     BlockPos support=app.config.staging.pos().below();
                     var hit=new BlockHitResult(Vec3.atLowerCornerWithOffset(support,0.5,1,0.5),Direction.UP,support,false);
-                    mc.gameMode.useItemOn(mc.player,InteractionHand.MAIN_HAND,hit);
+                    app.navigation.interactAt(hit);
                     state=Stage.WAIT_PLACE;ticks=0;
                 }
                 case WAIT_PLACE -> {
+                    if(ticks>80){fail("Placement was not confirmed; player "+mc.player.position()+", selected slot "+mc.player.getInventory().getSelectedSlot()+", reserved slot "+hand+", item "+mc.player.getInventory().getItem(hand)+", staging block "+mc.level.getBlockState(app.config.staging.pos()));return;}
                     if(ticks<app.config.delayTicks || !mc.player.getInventory().getItem(hand).isEmpty())return;
                     if(!(mc.level.getBlockState(app.config.staging.pos()).getBlock() instanceof ShulkerBoxBlock))return;
                     mc.player.getInventory().setSelectedSlot(oldHand);persist("Shulker placed at staging position");open(location(active),Stage.OPEN_BOX);
@@ -176,7 +187,7 @@ public final class ShulkerAccess {
                 case RETURN_POSITION -> {
                     if(findRecovered()<0){fail("Recovered box changed while returning to the workshop position");return;}
                     Vec3 player=mc.player.position();
-                    if(standingPosition==null||Math.hypot(player.x-standingPosition.x,player.z-standingPosition.z)<0.15){
+                    if(standingPosition==null||Math.hypot(player.x-standingPosition.x,player.z-standingPosition.z)<0.35){
                         stopWalking();if(ticks<app.config.delayTicks)return;
                         mc.player.setYRot(standingYaw);open(active.pos(),Stage.OPEN_RETURN);return;
                     }
@@ -227,9 +238,8 @@ public final class ShulkerAccess {
     private void walkTo(Vec3 target) {
         Vec3 player=mc.player.position();BlockPos support=BlockPos.containing(target).below();
         if(player.distanceTo(target)>2 || Math.abs(player.y-target.y)>0.6 || !mc.level.getBlockState(support).isCollisionShapeFullBlock(mc.level,support)){fail("Shulker pickup needs manual recovery; workshop floor is no longer safely reachable");return;}
-        if(Math.hypot(player.x-target.x,player.z-target.z)<0.15){stopWalking();return;}
-        mc.player.setYRot((float)Math.toDegrees(Math.atan2(-(target.x-player.x),target.z-player.z)));
-        mc.options.keyUp.setDown(true);walking=true;
+        if(Math.hypot(player.x-target.x,player.z-target.z)<0.3){stopWalking();return;}
+        app.navigation.walkTo(BlockPos.containing(target),()->{});
     }
     private void stopWalking(){if(walking){mc.options.keyUp.setDown(false);walking=false;}}
     public void abort(String reason){if(state==Stage.FAILED)return;stopWalking();if(mc.gameMode!=null)mc.gameMode.stopDestroyBlock();if(active!=null && mc.level!=null)try{persist("INTERRUPTED: "+reason);}catch(RuntimeException e){app.log("Recovery record could not be updated; inspect the previous record.");}state=Stage.FAILED;}
@@ -260,8 +270,11 @@ public final class ShulkerAccess {
         json.add("staging",new Gson().toJsonTree(app.config.staging));
         var ops=mc.level.registryAccess().createSerializationContext(JsonOps.INSTANCE);
         json.add("box",ItemStack.CODEC.encodeStart(ops,expectedBox==null?active.box():expectedBox).getOrThrow());
-        try {Files.createDirectories(WorkshopConfig.directory());var path=recoveryPath(app);var temp=path.resolveSibling(path.getFileName()+".tmp");Files.writeString(temp,new GsonBuilder().setPrettyPrinting().create().toJson(json));Files.move(temp,path,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}
-        catch(Exception e){throw new IllegalStateException("Cannot persist shulker recovery record; movement stopped",e);}
+        try {Files.createDirectories(WorkshopConfig.directory());var path=recoveryPath(app);var temp=path.resolveSibling(path.getFileName()+".tmp");Files.writeString(temp,new GsonBuilder().setPrettyPrinting().create().toJson(json));
+            try{Files.move(temp,path,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}
+            catch(AtomicMoveNotSupportedException e){Files.move(temp,path,StandardCopyOption.REPLACE_EXISTING);}
+        }
+        catch(Exception e){throw new IllegalStateException("Cannot persist shulker recovery record ("+e.getClass().getSimpleName()+": "+e.getMessage()+"); movement stopped",e);}
     }
     private void clearRecovery(){try{Files.deleteIfExists(recoveryPath(app));}catch(Exception e){app.log("Returned shulker; could not remove its recovery record.");}}
 }

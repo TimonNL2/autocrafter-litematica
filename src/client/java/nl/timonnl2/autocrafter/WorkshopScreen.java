@@ -50,7 +50,7 @@ public final class WorkshopScreen extends Screen {
                 app.selection=kind;app.corner=null;onClose();
                 minecraft.gui.hud.setOverlayMessage(Component.literal(kind.equals("Staging")?"Click the support block to set Staging.":"Left-click the first corner block, then right-click the second corner."),false);
             },false); }
-            button(left,bottom-28,88,24,"Scan storage","Opens selected containers; does not move items",()->safe(()->app.scanner.begin()),true);
+            button(left,bottom-28,88,24,"Scan storage","Walks to selected containers and scans them without moving their items",()->safe(()->app.scanner.begin()),true);
             button(left+96,bottom-28,106,24,"Remove last region","Remove the most recently added region",()->{
                 if(app.executor.busy()) {notice="Stop the active task before editing regions.";return;}
                 if(!app.config.regions.isEmpty()) {app.config.regions.removeLast();app.save();app.plan=null;app.scanner.complete=false;}
@@ -112,9 +112,9 @@ public final class WorkshopScreen extends Screen {
         g.fill(0,0,width,2,MINT);
         g.text(font,"AUTOCRAFTER",left,15,TEXT,false);
         g.text(font,"WORKSHOP / 26.3",left+94,16,MUTED,false);
-        String badge="0.2 BETA 2";g.text(font,badge,width-16-font.width(badge),16,AMBER,false);
+        String badge="0.3 BETA 1";g.text(font,badge,width-16-font.width(badge),16,AMBER,false);
         int card=(contentWidth-16)/3;
-        stat(g,left,76,card,"STORAGE",app.scanner.complete?app.scanner.containers.size()+" scanned":"Scan required");
+        stat(g,left,76,card,"STORAGE",app.scanner.complete?app.scanner.containers.size()+" scanned":app.scanner.running?"Scanning...":"Scan required");
         stat(g,left+card+8,76,card,"RECIPES",app.catalog.layouts.size()+" known");
         stat(g,left+2*(card+8),76,card,"TASK",app.executor.state.toString().replace('_',' '));
         if(tab==0) {
@@ -137,11 +137,12 @@ public final class WorkshopScreen extends Screen {
     private void panel(GuiGraphicsExtractor g,int x,int y,int w,int h) {g.fill(x,y,x+w,y+h,PANEL);g.outline(x,y,w,h,EDGE);}
     private void renderStorage(GuiGraphicsExtractor g) {
         List<String> lines=new ArrayList<>();
+        lines.add(app.scanner.detail);
         if(boxPreview){
             lines.add("REVIEW PHYSICAL SHULKER INSPECTION");
             lines.add("Each packed box will be taken from its slot, placed at Staging, opened, mined, picked up and returned to the same slot. Contents will not be transferred.");
             for(var c:app.scanner.containers)if(c.packed())lines.add(c.kind()+" "+c.label());
-            lines.add("Keep your main inventory empty and stand beside the staging position. Confirm scan authorizes these movements.");
+            lines.add("Keep your main inventory empty and leave a clear walkway to Staging. Confirm scan authorizes these movements.");
             lines(g,lines,top+34,bottom-36);return;
         }
         lines.add("REGIONS  /  left-click first, right-click second");
@@ -204,7 +205,7 @@ public final class WorkshopScreen extends Screen {
     private void renderSettings(GuiGraphicsExtractor g) {
         panel(g,left,top,contentWidth,bottom-top);
         g.text(font,"WORKSHOP PREFERENCES",left+12,top+12,MINT,false);
-        List<String> lines=List.of("Personal inventory: protected; empty job buffer required.","Shulkers: automatic placement, opening, recovery and return.","Stand beside a clear staging block on a solid floor.","Output: products, surplus and remainders go to the reviewed output.","Configuration, result reports and recovery logs stay on this computer.","No telemetry. No server mod. No Litematica dependency.");
+        List<String> lines=List.of("Personal inventory: protected; empty job buffer required.","Shulkers: automatic placement, opening, recovery and return.","Baritone handles walking and looking. Keep walkways clear.","Output: products, surplus and remainders go to the reviewed output.","Configuration, result reports and recovery logs stay on this computer.","No telemetry. No server mod. No Litematica dependency.");
         lines(g,lines,top+86,bottom-4);
     }
     private void lines(GuiGraphicsExtractor g,List<String> lines,int y,int end) {

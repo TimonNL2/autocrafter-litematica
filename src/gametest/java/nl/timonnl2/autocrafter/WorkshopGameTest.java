@@ -34,6 +34,13 @@ public class WorkshopGameTest implements FabricClientGameTest {
             server.runCommand("gamemode survival @a");
             server.runCommand("clear @a");
             server.runCommand("recipe give @a *");
+            server.runOnServer(s->{
+                s.getWorldData().setAllowCommands(false);
+                for(var player:s.getPlayerList().getPlayers()){
+                    s.getPlayerList().deop(player.nameAndId());
+                    if(s.getProfilePermissions(player.nameAndId()).level().id()!=0)throw new AssertionError("Test player must have permission level zero");
+                }
+            });
             server.runOnServer(s->((ChestBlockEntity)s.overworld().getBlockEntity(new BlockPos(0,65,2))).setItem(0,new ItemStack(Items.IRON_BLOCK)));
             context.waitTicks(30);
             context.runOnClient(mc->{
@@ -62,6 +69,8 @@ public class WorkshopGameTest implements FabricClientGameTest {
             context.runOnClient(mc->{
                 var app=WorkshopClient.INSTANCE;
                 if(!app.scanner.complete)throw new AssertionError(String.join("\n",app.log));
+                app.scanner.requestStop();
+                if(!app.scanner.complete)throw new AssertionError("Stop invalidated an already completed scan");
                 app.makePlan();
                 if(app.plan.targets().getFirst().available()!=9)throw new AssertionError("Iron block unpacking was not planned");
                 app.executor.start();
@@ -89,6 +98,7 @@ public class WorkshopGameTest implements FabricClientGameTest {
                 chest.setItem(3,new ItemStack(Items.WHEAT,3));chest.setItem(4,new ItemStack(Items.SUGAR,2));chest.setItem(5,new ItemStack(Items.EGG));
             });
             context.waitTicks(12);runJob(context,"minecraft:cake 1");assertOutput(server,Items.CAKE,1);assertOutput(server,Items.BUCKET,3);
+            context.runOnClient(mc->{long confirmations=WorkshopClient.INSTANCE.log.stream().filter(line->line.startsWith("CONFIRMED Collecting source stack")&&line.contains(" / 6")).count();if(confirmations!=1)throw new AssertionError("Six source stacks must be collected in one verified batch: "+confirmations);});
             // A personal stack must block a new task before it moves anything.
             context.runOnClient(mc->WorkshopClient.INSTANCE.scanner.begin());
             context.waitFor(mc->!WorkshopClient.INSTANCE.scanner.running,400);
@@ -179,6 +189,20 @@ public class WorkshopGameTest implements FabricClientGameTest {
                 var output=(Container)s.overworld().getBlockEntity(new BlockPos(2,65,0));
                 if(!output.getItem(4).is(Items.SHULKER_BOX)||!output.getItem(7).is(Items.SHULKER_BOX)||!s.overworld().getBlockState(new BlockPos(0,65,-1)).isAir())throw new AssertionError("Recovery did not restore original box slots");
             });
+            // Survival, permission level zero: route around a wall to storage outside interaction range.
+            server.runCommand("fill -4 64 -4 14 64 4 minecraft:stone");
+            server.runCommand("fill 4 65 -1 4 67 1 minecraft:stone");
+            server.runCommand("setblock 12 65 0 minecraft:chest");
+            server.runCommand("tp @a 0.5 65 0.5");
+            server.runOnServer(s->{
+                var input=(Container)s.overworld().getBlockEntity(new BlockPos(12,65,0));input.setItem(0,new ItemStack(Items.IRON_BLOCK));input.setItem(1,new ItemStack(Items.GOLD_BLOCK));
+                ((Container)s.overworld().getBlockEntity(new BlockPos(2,65,0))).clearContent();
+            });
+            context.waitTicks(15);
+            context.runOnClient(mc->{var app=WorkshopClient.INSTANCE;app.config.regions.removeIf(r->r.kind().equals("Input"));app.config.regions.add(region("Input",12,65,0));app.config.oneItemPerBox=false;});
+            runJob(context,"minecraft:iron_ingot 9\nminecraft:gold_ingot 9");
+            assertOutput(server,Items.IRON_INGOT,9);assertOutput(server,Items.GOLD_INGOT,9);
+            server.runOnServer(s->{for(int y=65;y<=67;y++)for(int z=-1;z<=1;z++)if(!s.overworld().getBlockState(new BlockPos(4,y,z)).is(net.minecraft.world.level.block.Blocks.STONE))throw new AssertionError("Navigation broke the wall");});
         }
     }
     private static void runJob(ClientGameTestContext context,String materials) {

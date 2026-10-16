@@ -2,6 +2,15 @@
 
 Every published version has an immutable Git tag and a GitHub Release with a mod JAR, source JAR and SHA-256 checksums. Older versions remain available on the [Releases page](https://github.com/TimonNL2/autocrafter-litematica/releases).
 
+## 0.3.0-beta.1 — 2026-10-16
+
+- Requires the official Baritone API Fabric 1.20.0 mod for Minecraft 26.3.
+- Walk to selected storage and crafting tables and turn toward interactions using Baritone. Navigation temporarily disables breaking, placing, parkour, sprinting and inventory management, then restores previous settings.
+- Walk to a clear standing position beside Staging and precisely centre the player before placing a shulker.
+- Visible scan progress and failure reasons. A completed scan is no longer invalidated by an idle Stop action; start checks distinguish missing scans from missing production plans.
+- Collect all reserved source stacks from the same container in one opening session, with one authoritative verification afterward.
+- Survival integration tests explicitly remove OP/command permissions and exercise distant storage behind an obstacle.
+
 ## 0.2.0-beta.2 — 2026-10-16
 
 - Select region boxes with left-click for the first corner and right-click for the second corner.

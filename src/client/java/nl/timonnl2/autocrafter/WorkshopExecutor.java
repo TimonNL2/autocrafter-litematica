@@ -18,6 +18,7 @@ public final class WorkshopExecutor {
     public int completedCrafts;
     private List<Pickup> pickups=List.of();
     private int pickupIndex;
+    private int collectionNext;
     private StorageScanner.Container output;
     private final Map<String,StorageScanner.Container> destinations=new TreeMap<>();
     private StorageScanner.Container currentContainer;
@@ -38,7 +39,9 @@ public final class WorkshopExecutor {
     public List<String> preflight() {
         if(busy()) return List.of("Stop the active task before reviewing a new task.");
         List<String> errors=new ArrayList<>();
-        if(mc.player==null || mc.level==null || app.plan==null || !app.scanner.complete) return List.of("Create a plan from a completed scan first.");
+        if(mc.player==null || mc.level==null) return List.of("Join a world before starting a task.");
+        if(!app.scanner.complete)return List.of("Storage scan is not complete: "+app.scanner.detail);
+        if(app.plan==null)return List.of("Storage scan is ready. Click Build plan before Review moves.");
         if(mc.player.isCreative() || mc.player.isSpectator()) errors.add("Use survival mode for inventory-safe execution.");
         for(int i=0;i<36;i++) if(!mc.player.getInventory().getItem(i).isEmpty()) { errors.add("Empty your 36 main inventory slots. The workshop reserves them for the job and never consumes personal stacks."); break; }
         if(!mc.player.getOffhandItem().isEmpty()) errors.add("Empty your offhand before starting.");
@@ -87,10 +90,8 @@ public final class WorkshopExecutor {
             }
             output=destinations.values().stream().findFirst().orElse(null);
         } else if(output!=null)for(var entry:gathered.entrySet())if(entry.getValue()>0)destinations.put(entry.getKey(),output);
-        table=app.scanner.tables.stream().filter(p->StorageScanner.reachable(mc,p)!=null).findFirst().orElse(null);
-        if(!app.plan.steps().isEmpty() && table==null) errors.add("No reachable crafting table in the Work region.");
-        for(var pick:selected) if(StorageScanner.reachable(mc,pick.source.pos())==null) { errors.add("Input is out of reach: "+pick.source.pos().toShortString()); break; }
-        for(var destination:new HashSet<>(destinations.values()))if(StorageScanner.reachable(mc,destination.pos())==null)errors.add("Output is out of reach: "+destination.label());
+        table=app.scanner.tables.stream().filter(p->mc.level.hasChunkAt(p)).findFirst().orElse(null);
+        if(!app.plan.steps().isEmpty() && table==null) errors.add("No loaded crafting table in the Work region.");
         if(selected.stream().anyMatch(p->p.source.packed()) || destinations.values().stream().anyMatch(StorageScanner.Container::packed))errors.addAll(access.stagingProblems());
         if(java.nio.file.Files.exists(ShulkerAccess.recoveryPath(app)))errors.add("An interrupted shulker operation needs recovery. Open Activity before starting a new task.");
         pickups=List.copyOf(selected);
@@ -118,6 +119,7 @@ public final class WorkshopExecutor {
     }
     public List<String> movements() {
         List<String> lines=new ArrayList<>();
+        lines.add("Baritone will walk to the selected storage, crafting table and staging position, and turn toward each interaction.");
         for(var pick:pickups) { var stack=pick.source.items().get(pick.slot); lines.add(stack.getCount()+" "+RecipeCatalog.id(stack)+" from "+pick.source.label()); }
         destinations.forEach((id,destination)->lines.add(id+" -> "+destination.label()));
         if(pickups.stream().anyMatch(p->p.source.packed())||destinations.values().stream().anyMatch(StorageScanner.Container::packed))lines.add("Reserved shulkers will be placed, opened, recovered and returned to their original chest slots.");
@@ -144,6 +146,7 @@ public final class WorkshopExecutor {
     }
     public void stop(String reason) {
         if(!busy()) return;
+        app.navigation.cancel();
         state=State.STOPPED; detail=reason; pauseRequested=false; app.scanner.complete=false;
         access.abort(reason);
         // No cursor actions are ever used. Leave the current menu visible for recovery.
@@ -169,6 +172,7 @@ public final class WorkshopExecutor {
     }
     public void tick() {
         if(!busy() || state==State.PAUSED) return;
+        if(app.navigation.busy())return;
         if(state==State.ACCESS){access.tick();return;}
         if(mc.player==null || mc.level==null || mc.player.isDeadOrDying()) { stop("Disconnected or player unavailable"); return; }
         if(mc.player.isShiftKeyDown()) { stop("Sneaking interrupted the task"); return; }
@@ -186,9 +190,10 @@ public final class WorkshopExecutor {
             if(state==State.VERIFYING) {
                 if(phase!=1)access.snapshotChanged(currentContainer);
                 app.journal("CONFIRMED "+detail+" at "+position.toShortString());
-                if(phase==0) pickupIndex++; else if(phase==1) completedCrafts++;
+                if(phase==0) pickupIndex=collectionNext; else if(phase==1) completedCrafts++;
                 next(); return;
             }
+            if(phase==0)collectionNext=pickupIndex;
             state=State.READY; ticks=0;
         }
         if(state==State.READY && ticks>=app.config.delayTicks) {
@@ -196,9 +201,14 @@ public final class WorkshopExecutor {
             if(!inventory().equals(expectedInventory) || phase!=1 && !same(containerItems(menu),snapshots.get(currentContainer.key()))) {stop("Items changed before the next action");return;}
             if(phase==1 && !gridEmpty(menu)) {stop("Crafting grid changed before recipe placement");return;}
             if(phase==0) {
-                var pick=pickups.get(pickupIndex);
+                var pick=pickups.get(collectionNext);
                 click(pick.slot,0,ContainerInput.QUICK_MOVE);
                 checkpoint();
+                collectionNext++;
+                if(collectionNext<pickups.size()&&pickups.get(collectionNext).source.key().equals(currentContainer.key())){
+                    // Keep this menu open for the whole source batch. One authoritative reopen follows the last transfer.
+                    state=State.READY;ticks=0;detail="Collecting source stack "+(collectionNext+1)+" / "+pickups.size();
+                }
             } else if(phase==1) {
                 var step=steps.get(completedCrafts); var layout=app.catalog.layouts.get(step.recipe());
                 app.journal("INTENT place recipe "+step.output());

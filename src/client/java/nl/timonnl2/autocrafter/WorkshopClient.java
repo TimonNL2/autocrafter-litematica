@@ -30,6 +30,7 @@ public final class WorkshopClient implements ClientModInitializer {
     public WorkshopExecutor executor = new WorkshopExecutor(this);
     public RecipeCatalog catalog = new RecipeCatalog();
     public Planner.Plan plan;
+    public final WorkshopNavigation navigation=new WorkshopNavigation();
     public String selection;
     public BlockPos corner;
     public List<String> lastReport=new ArrayList<>();
@@ -42,10 +43,12 @@ public final class WorkshopClient implements ClientModInitializer {
         selectKey=KeyMappingHelper.registerKeyMapping(new KeyMapping("key.autocrafter.select",InputConstants.KEY_U,category));
         stopKey=KeyMappingHelper.registerKeyMapping(new KeyMapping("key.autocrafter.stop",InputConstants.KEY_O,category));
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STARTED.register(mc->WorkshopNavigation.configureCacheWorkers());
     }
     private void tick(Minecraft mc) {
         String key=WorkshopConfig.worldKey(mc);
         if (!world.equals(key)) {
+            navigation.cancel();
             if(recovery!=null)recovery.abort("World changed");recovery=null;lastReport=new ArrayList<>();
             scanner.stop("World changed. Scan discarded."); executor.stop("World changed. Review recovery log before continuing.");
             world=key; plan=null; selection=null; corner=null; clearContentReceipts();
@@ -60,8 +63,8 @@ public final class WorkshopClient implements ClientModInitializer {
         }
         while (stopKey.consumeClick()) { scanner.requestStop(); executor.requestStop(); }
         while (selectKey.consumeClick()) select(mc);
-        try { if(recovery!=null&&recovery.busy())recovery.tick();else {scanner.tick(); executor.tick();} }
-        catch (RuntimeException e) { scanner.stop("Operation stopped: " + e.getMessage()); executor.stop("Operation stopped: " + e.getMessage()); }
+        try { navigation.tick();if(recovery!=null&&recovery.busy())recovery.tick();else {scanner.tick(); executor.tick();} }
+        catch (RuntimeException e) { navigation.cancel();if(recovering())recovery.abort(e.getMessage());scanner.stop("Operation stopped: " + e.getMessage()); executor.stop("Operation stopped: " + e.getMessage());if(mc.player!=null)open(); }
     }
     public void open() { Minecraft.getInstance().gui.setScreen(new WorkshopScreen(this)); }
     public void log(String message) {
@@ -98,7 +101,7 @@ public final class WorkshopClient implements ClientModInitializer {
     }
     public void makePlan() {
         if(executor.busy()) throw new IllegalArgumentException("Stop the active task before building another plan.");
-        if(!scanner.complete) throw new IllegalArgumentException("Complete a fresh storage scan first.");
+        if(!scanner.complete) throw new IllegalArgumentException("Storage scan is not complete: "+scanner.detail);
         var parsed=MaterialList.parse(config.materials,RecipeCatalog::resolve);
         if(!parsed.errors().isEmpty()) throw new IllegalArgumentException(parsed.errors().getFirst());
         if(parsed.entries().isEmpty()) throw new IllegalArgumentException("Add at least one material.");

@@ -31,6 +31,8 @@ public final class StorageScanner {
     private int previousMenu;
     public boolean running;
     public boolean complete;
+    public String detail="No storage scan yet. Open Storage and choose Scan storage.";
+    private int scanned,total;
     private boolean detailed;
     private boolean cancelDetailed;
     private ShulkerAccess boxAccess;
@@ -40,8 +42,12 @@ public final class StorageScanner {
 
     public void begin() {
         if(running||app.recovering())throw new IllegalArgumentException("Finish or stop the current storage operation first.");
-        if (mc.player == null || mc.level == null || app.executor.busy()) return;
+        if(mc.player==null||mc.level==null)throw new IllegalArgumentException("Join a world before scanning storage.");
+        if(app.executor.busy())throw new IllegalArgumentException("Stop the current crafting task before scanning again.");
+        if(!mc.player.containerMenu.getCarried().isEmpty())throw new IllegalArgumentException("Clear the cursor stack before scanning.");
+        if(mc.player.isShiftKeyDown())throw new IllegalArgumentException("Release sneak before scanning.");
         containers.clear(); tables.clear(); stock.clear(); shulkers.clear(); pending.clear(); complete=false; current=null;
+        detail="Scan setup did not complete. Check the selected regions and the message below.";
         Map<BlockPos,String> found = new LinkedHashMap<>();
         for (var region : app.config.regions) {
             if (region.volume() > 32768) throw new IllegalArgumentException("A region cannot exceed 32,768 blocks");
@@ -62,20 +68,20 @@ public final class StorageScanner {
         }
         found.forEach((pos,kind) -> pending.add(Map.entry(pos,kind)));
         if (pending.isEmpty()) throw new IllegalArgumentException("No storage found. Select Input and Output regions first.");
-        if(!mc.player.containerMenu.getCarried().isEmpty())throw new IllegalArgumentException("Clear the cursor stack before scanning.");
-        if(mc.player.isShiftKeyDown())throw new IllegalArgumentException("Release sneak before scanning.");
         if(mc.player.containerMenu!=mc.player.inventoryMenu)mc.player.closeContainer();
-        mc.gui.setScreen(null); running=true; app.plan=null;
+        mc.gui.setScreen(null); running=true; app.plan=null;scanned=0;total=pending.size();detail="Scanning 0 / "+total+" containers";
         app.log("Scan started: " + pending.size() + " containers. No items will be moved.");
     }
     public void tick() {
         if (!running) return;
+        if(app.navigation.busy()){detail=(detailed?"Inspecting shulkers: ":"Scanning "+scanned+" / "+total+": ")+app.navigation.detail;return;}
         if (mc.player == null || mc.level == null) { stop("Disconnected. Scan discarded."); return; }
         if(detailed){boxAccess.tick();return;}
         if (current == null) {
-            if (pending.isEmpty()) { running=false; complete=true; app.log("Scan complete: " + containers.size() + " containers, " + stock.size() + " available item types."); app.open(); return; }
+            if (pending.isEmpty()) { running=false; complete=true;detail="Scan complete: "+scanned+" / "+total+" containers, "+stock.size()+" item types";app.log(detail); app.open(); return; }
             current = pending.peek(); wait=0; previousMenu=mc.player.containerMenu.containerId;
             if (!open(mc, current.getKey())) { stop("Cannot reach " + current.getKey().toShortString() + ". Move closer and scan again."); return; }
+            return;
         }
         wait++;
         var menu = mc.player.containerMenu;
@@ -99,11 +105,11 @@ public final class StorageScanner {
             }
             containers.add(new Container(current.getKey(),current.getValue(),List.copyOf(items)));
             containers.addAll(boxes);
-            rebuildStock();mc.player.closeContainer(); pending.remove(); current=null;
+            rebuildStock();mc.player.closeContainer(); pending.remove(); current=null;scanned++;detail="Scanning "+scanned+" / "+total+" containers";
         } else if (wait > 120) stop("No confirmed container contents received within 6 seconds. Scan stopped.");
     }
-    public void stop(String reason) { running=false; complete=false; if(boxAccess!=null)boxAccess.abort(reason);detailed=false;app.log(reason); }
-    public void requestStop(){if(detailed){cancelDetailed=true;app.log("Stopping scan after returning the current shulker.");}else stop("Scan stopped.");}
+    public void stop(String reason) { boolean wasRunning=running;if(wasRunning)app.navigation.cancel();running=false; complete=false;detail=reason; if(boxAccess!=null)boxAccess.abort(reason);detailed=false;app.log(reason);if(wasRunning&&mc.player!=null){mc.gui.hud.setOverlayMessage(net.minecraft.network.chat.Component.literal(reason),false);app.open();} }
+    public void requestStop(){if(!running)return;if(detailed){cancelDetailed=true;app.log("Stopping scan after returning the current shulker.");}else stop("Scan stopped after "+scanned+" / "+total+" containers.");}
     public void beginBoxScan() {
         if(running||app.recovering())throw new IllegalArgumentException("Finish the current storage operation first.");
         if(!complete || app.executor.busy())throw new IllegalArgumentException("Complete the chest scan first and stop any active task.");
@@ -117,7 +123,7 @@ public final class StorageScanner {
         detailed=true;running=true;complete=false;cancelDetailed=false;app.plan=null;nextBox();
     }
     private void nextBox() {
-        if(cancelDetailed||pendingBoxes.isEmpty()){running=false;detailed=false;complete=!cancelDetailed;rebuildStock();app.log(cancelDetailed?"Shulker scan stopped; handled boxes returned.":"Physical shulker scan completed; all boxes returned.");app.open();return;}
+        if(cancelDetailed||pendingBoxes.isEmpty()){running=false;detailed=false;complete=!cancelDetailed;rebuildStock();detail=cancelDetailed?"Shulker scan stopped; handled boxes returned.":"Physical shulker scan completed; all boxes returned.";app.log(detail);app.open();return;}
         var box=pendingBoxes.remove();
         boxAccess.ensure(new Container(box.pos(),box.kind(),box.items(),box.boxSlot(),box.box(),false),()->{
             var verified=ShulkerAccess.copy(boxSnapshots.get(box.key()));
@@ -143,12 +149,8 @@ public final class StorageScanner {
         return hit;
     }
     public static boolean open(Minecraft mc, BlockPos pos) {
-        BlockHitResult hit=reachable(mc,pos);
-        if (hit==null || mc.gameMode==null || !mc.player.containerMenu.getCarried().isEmpty()) return false;
-        if (mc.player.containerMenu != mc.player.inventoryMenu) mc.player.closeContainer();
-        WorkshopClient.clearContentReceipts();
-        mc.gui.setScreen(null);
-        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
+        if (mc.player==null||mc.gameMode==null || !mc.player.containerMenu.getCarried().isEmpty()) return false;
+        WorkshopClient.INSTANCE.navigation.open(pos);
         return true;
     }
 }

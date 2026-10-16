@@ -25,3 +25,5 @@ Automated local integration is not proof of compatibility with every server plug
 The expanded integration test also physically inspects packed boxes, crafts from a packed input into a packed output, checks a 12-requested / 9-delivered / 3-uncompleted report, sorts iron and gold into separate boxes, and interrupts a placed-box inspection before recovering from its persisted record. Assertions inspect server storage, exact original slots and the cleared staging position.
 
 Mouse selection regression: the client test sends real MouseHandler button events, checks that right-click waits for a first corner, saves a region using left/right clicks, and verifies that attack/use bindings were not activated.
+
+The survival fixture sets allowCommands to false, removes operator entries and asserts player permission level 0. A distant-storage case places a chest beyond reach behind a stone wall, verifies both requested outputs and asserts the wall remained intact. A six-stack source test expects one collection verification for the batch. An idle Stop action must preserve a completed scan.

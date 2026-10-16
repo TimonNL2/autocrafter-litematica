@@ -9,18 +9,18 @@ A client-side crafting workshop for **Minecraft Java 26.3**. Import a material l
 ## Install
 
 1. Install Fabric Loader **0.19.5 or later** for Minecraft **26.3**.
-2. Add Fabric API **0.162.0+26.3** and the release mod JAR to your client `mods` directory.
+2. Add Fabric API **0.162.0+26.3**, [Baritone API Fabric **1.20.0**](https://github.com/cabaletta/baritone/releases/download/v1.20.0/baritone-api-fabric-1.20.0.jar), and the release mod JAR to your client `mods` directory.
 3. Use **Java 25**. Start the Fabric profile and join your world/server.
 4. Press **K** to open the workshop. Key bindings can be changed in Minecraft Controls.
 
-Use the JAR without `-sources` in its name. Litematica is optional. The server does not need a plugin or mod.
+Use the JAR without `-sources` in its name. Litematica is optional. The server does not need a plugin or mod. Survival players do not need OP or command permissions; ordinary container access and server protection rules still apply. Baritone is a separate client dependency; do not install a build for a different Minecraft version.
 
 ## Set up your craft room
 
 1. In **Storage**, choose **+ Input**. Left-click the first corner block, then right-click the opposite corner. Left-click again to replace the first corner before finishing. Selection clicks do not mine blocks or open containers. The **U** key remains available as an alternative. Select both halves of double chests. Repeat for additional regions.
 2. Select an **Output** region containing an empty chest, barrel, placed shulker, or a chest containing empty output shulkers, then a **Work** region containing a crafting table.
-3. Keep the selected containers and table within normal reach, unobstructed and loaded. There is no pathfinding between storage containers. Shulker pickup may take a short step toward Staging.
-4. For packed shulkers, mark a **Staging** position by clicking a solid non-interactive support block. Keep the block above it and the next block clear. Stand beside it on the same floor, within 1.6 blocks of its centre. Keep hoppers, fluids, fire and cactus away.
+3. Keep selected storage and tables loaded, with walkable access. Baritone walks into interaction range and turns toward each container. Workshop navigation disables block breaking/placement, inventory management, parkour and sprinting, then restores the previous Baritone settings.
+4. For packed shulkers, mark a **Staging** position by clicking a solid non-interactive support block. Keep the block above it and the next block clear. Leave clear standing spaces beside it, on a solid floor. Baritone walks to the staging position. Keep hoppers, fluids, fire and cactus away.
 5. Open **Materials**, type a list or import it from the clipboard, then **Save list**. Plain lines, CSV and Litematica-style text tables are supported. Export totals are used, not the export's missing column.
 
 ```text
@@ -29,9 +29,9 @@ minecraft:comparator 8
 minecraft:iron_ingot 9
 ```
 
-6. Choose **Scan storage**. If packed contents are unknown, choose **Inspect boxes**, review the movements and confirm the physical scan. Each box is placed, opened, recovered and returned to its original slot. Then use **Plan → Build plan**. Only recipes received in the connected client's recipe book are used.
+6. Choose **Scan storage**. Progress and any failure reason appear in Storage; Build plan distinguishes an incomplete scan from a completed scan awaiting a plan. Pressing Stop after a successful scan does not discard it. If packed contents are unknown, choose **Inspect boxes**, review the movements and confirm the physical scan. Each box is placed, opened, recovered and returned to its original slot. Then use **Plan → Build plan**. Only recipes received in the connected client's recipe book are used.
 7. Empty your main inventory and offhand. Open **Review moves** and inspect whole-stack pickups, output destination, quantities, shortages and start checks. **Confirm start** authorizes this exact workflow.
-8. Use **K** to pause at the next verified checkpoint. Resume from **Activity**, or press **O** for a safe stop. Do not manually click the containers during a running task.
+8. Source stacks from the same container are collected in one opening session, with one authoritative reopen after the final transfer. Use **K** to pause at the next verified checkpoint. Resume from **Activity**, or press **O** for a safe stop. Do not manually click the containers during a running task.
 
 Products, surplus ingredients and crafting remainders go to the reviewed output containers. Settings offers mixed output or one item type per container, preferring reserved packed shulkers. Safe stop and pause return the active shulker first; job items remain in your inventory. After an unexpected interruption, use **Activity → Recover box** to return the recorded box, then scan again. If the original slot or contents changed, recovery stops for manual inspection. Jobs never resume automatically after reconnecting.
 
@@ -46,7 +46,7 @@ Products, surplus ingredients and crafting remainders go to the reviewed output 
 | Recipes | Known server-supplied displays; component-sensitive/dynamic recipes are excluded |
 | Priority | Material list order; no claim of globally optimal allocation |
 | Other workstations | Not supported: furnaces, stonecutters, brewing, smithing |
-| Other limitations | No storage pathfinding or direct Litematica API integration |
+| Other limitations | No direct Litematica API integration; blocked or unloaded routes stop with an explanation |
 
 Selected regions are stored per world/server and dimension under `config/autocrafter-litematica/`. Filenames use a hashed world identifier. Recovery logs stay in the same local directory. There is no telemetry, external account or server-address logging.
 
@@ -76,7 +76,7 @@ cd autocrafter-litematica
 ./gradlew build
 ```
 
-The mod is at `build/libs/autocrafter-litematica-0.2.0-beta.2.jar`. Sources and test reports are generated alongside the build. Run `./gradlew runClient` for a development client or `./gradlew runClientGameTest` for the real-client smoke/integration test.
+The mod is at `build/libs/autocrafter-litematica-0.3.0-beta.1.jar`. Sources and test reports are generated alongside the build. Run `./gradlew runClient` for a development client or `./gradlew runClientGameTest` for the real-client smoke/integration test.
 
 Minecraft 26.3 is unobfuscated; the project uses the game's actual class names without Yarn mappings. Pinned versions are in `gradle.properties`. The wrapper checksum is pinned too.
 
