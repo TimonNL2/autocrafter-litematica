@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "autocrafter_litematica",
+  "version": "${version}",
+  "name": "Autocrafter Litematica",
+  "description": "A client-side workshop for material lists, storage and reviewed crafting plans.",
+  "authors": ["TimonNL2"],
+  "license": "MIT",
+  "contact": {"sources": "https://github.com/TimonNL2/autocrafter-litematica", "issues": "https://github.com/TimonNL2/autocrafter-litematica/issues"},
+  "environment": "client",
+  "mixins": [{"config": "autocrafter.client.mixins.json", "environment": "client"}],
+  "entrypoints": {"client": ["nl.timonnl2.autocrafter.WorkshopClient"]},
+  "depends": {"fabricloader": ">=0.19.5", "minecraft": "~26.3", "java": ">=25", "fabric-api": "*"}
+}

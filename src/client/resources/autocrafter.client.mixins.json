@@ -1,0 +1,7 @@
+{
+  "required": true,
+  "package": "nl.timonnl2.autocrafter.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["ContainerUpdates", "RegionOverlay"],
+  "injectors": {"defaultRequire": 1}
+}

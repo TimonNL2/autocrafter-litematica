@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "autocrafter-workshop-test",
+  "version": "1.0.0",
+  "name": "Autocrafter Workshop integration tests",
+  "environment": "client",
+  "entrypoints": {"fabric-client-gametest": ["nl.timonnl2.autocrafter.WorkshopGameTest"]}
+}
