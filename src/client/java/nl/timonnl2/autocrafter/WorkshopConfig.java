@@ -26,6 +26,8 @@ public final class WorkshopConfig {
     public String materials = "minecraft:repeater 64\nminecraft:comparator 32";
     public int delayTicks = 8;
     public boolean inspectShulkers = true;
+    public boolean handleShulkers = true;
+    public boolean oneItemPerBox = false;
     public boolean showRegions = true;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 

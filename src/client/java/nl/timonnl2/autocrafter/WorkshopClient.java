@@ -32,6 +32,8 @@ public final class WorkshopClient implements ClientModInitializer {
     public Planner.Plan plan;
     public String selection;
     public BlockPos corner;
+    public List<String> lastReport=new ArrayList<>();
+    private ShulkerAccess recovery;
     private KeyMapping openKey, selectKey, stopKey;
     @Override public void onInitializeClient() {
         INSTANCE=this;
@@ -44,19 +46,21 @@ public final class WorkshopClient implements ClientModInitializer {
     private void tick(Minecraft mc) {
         String key=WorkshopConfig.worldKey(mc);
         if (!world.equals(key)) {
+            if(recovery!=null)recovery.abort("World changed");recovery=null;lastReport=new ArrayList<>();
             scanner.stop("World changed. Scan discarded."); executor.stop("World changed. Review recovery log before continuing.");
             world=key; plan=null; selection=null; corner=null; clearContentReceipts();
             try { config=WorkshopConfig.load(key); }
             catch (Exception e) { config=new WorkshopConfig(); log("Could not load configuration. Existing file was preserved."); }
             scanner=new StorageScanner(this); executor=new WorkshopExecutor(this);
+            try{var report=WorkshopConfig.directory().resolve(world+"-last-report.txt");if(Files.exists(report))lastReport=new ArrayList<>(Files.readAllLines(report));}catch(Exception e){log("Previous result report could not be loaded.");}
         }
         while (openKey.consumeClick()) if (mc.player!=null) {
             if(executor.busy() && executor.state!=WorkshopExecutor.State.PAUSED) executor.pause();
-            else {if(scanner.running) scanner.stop("Scan stopped to open workshop.");open();}
+            else {if(scanner.running) scanner.requestStop();else open();}
         }
-        while (stopKey.consumeClick()) { scanner.stop("Scan stopped by user."); executor.stop("Stopped by user. Items remain in the confirmed locations or job inventory."); }
+        while (stopKey.consumeClick()) { scanner.requestStop(); executor.requestStop(); }
         while (selectKey.consumeClick()) select(mc);
-        try { scanner.tick(); executor.tick(); }
+        try { if(recovery!=null&&recovery.busy())recovery.tick();else {scanner.tick(); executor.tick();} }
         catch (RuntimeException e) { scanner.stop("Operation stopped: " + e.getMessage()); executor.stop("Operation stopped: " + e.getMessage()); }
     }
     public void open() { Minecraft.getInstance().gui.setScreen(new WorkshopScreen(this)); }
@@ -72,7 +76,7 @@ public final class WorkshopClient implements ClientModInitializer {
     }
     public void save() { try { config.save(world); } catch(Exception e) { log("Could not save configuration: " + e.getMessage()); } }
     public void select(Minecraft mc) {
-        if(selection==null || mc.player==null || !(mc.hitResult instanceof BlockHitResult hit) || executor.busy()) return;
+        if(selection==null || mc.player==null || !(mc.hitResult instanceof BlockHitResult hit) || executor.busy() || scanner.running || recovering()) return;
         BlockPos pos=hit.getBlockPos();
         if(selection.equals("Staging")) { config.staging=WorkshopConfig.Point.of(pos.above()); selection=null; save(); log("Shulker staging position saved above the selected block."); return; }
         if(corner==null) { corner=pos.immutable(); mc.gui.hud.setOverlayMessage(Component.literal("First corner saved. Aim at the other corner and press U."),false); return; }
@@ -92,4 +96,25 @@ public final class WorkshopClient implements ClientModInitializer {
         plan=new Planner(catalog.recipes()).plan(parsed.entries(),scanner.stock);
         log("Plan ready: " + plan.steps().size()+" crafts using "+catalog.layouts.size()+" known recipes. Review before starting.");
     }
+    public void finishReport(Planner.Plan completedPlan) {
+        lastReport=new ArrayList<>();lastReport.add("TASK RESULTS");
+        Map<String,Integer> missing=new TreeMap<>();
+        for(var target:completedPlan.targets()) {
+            lastReport.add(target.item()+": requested "+target.requested()+", delivered "+target.available()+", not completed "+(target.requested()-target.available()));
+            target.missing().forEach((id,n)->{lastReport.add("  Still needed: "+n+" "+id);missing.merge(id,n,Integer::sum);});
+        }
+        lastReport.add("RAW MATERIALS STILL NEEDED (shared stock and recipe batches counted once)");
+        lastReport.add("For the selected known crafting recipes. Items without a usable recipe are listed as required supplies.");
+        missing.forEach((id,n)->lastReport.add(n+" "+id));
+        if(missing.isEmpty())lastReport.add("None");
+        lastReport.forEach(this::log);
+        try{Files.writeString(WorkshopConfig.directory().resolve(world+"-last-report.txt"),String.join(System.lineSeparator(),lastReport));}
+        catch(Exception e){log("Could not save the result report; it is still available in Activity.");}
+    }
+    public void recoverShulker() {
+        if(executor.busy()||scanner.running||recovering())throw new IllegalArgumentException("Stop the current operation before recovery.");
+        recovery=new ShulkerAccess(this,new HashMap<>());
+        recovery.recover(()->{log("Interrupted shulker operation recovered. Scan storage again before planning.");scanner.complete=false;open();},reason->{log(reason);open();});
+    }
+    public boolean recovering(){return recovery!=null&&recovery.busy();}
 }

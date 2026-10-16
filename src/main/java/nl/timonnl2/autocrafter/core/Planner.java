@@ -38,12 +38,16 @@ public final class Planner {
                 if (!take(request.item(), attempt, new HashSet<>(), 0)) break;
                 stock.adopt(attempt); done++;
             }
-            Map<String, Integer> missing = new TreeMap<>();
-            if (done < request.count()) {
-                Map<String, Integer> virtual = new HashMap<>(stock.items);
-                shortage(request.item(), request.count() - done, virtual, missing, new HashSet<>(), 0);
-            }
-            targets.add(new Target(request.item(), request.count(), done, Map.copyOf(missing)));
+            targets.add(new Target(request.item(), request.count(), done, Map.of()));
+        }
+        // Explain the remaining job against the stock left AFTER every achievable target.
+        // Share virtual stock so ingredients and recipe batch surplus are counted only once.
+        Map<String,Integer> virtual = new HashMap<>(stock.items);
+        for (int i=0;i<targets.size();i++) {
+            Target target=targets.get(i);
+            Map<String,Integer> missing=new TreeMap<>();
+            shortage(target.item(),target.requested()-target.available(),virtual,missing,new HashSet<>(),0);
+            targets.set(i,new Target(target.item(),target.requested(),target.available(),Map.copyOf(missing)));
         }
         return new Plan(List.copyOf(targets), List.copyOf(stock.steps), Map.copyOf(inventory), Map.copyOf(stock.items));
     }
@@ -104,6 +108,7 @@ public final class Planner {
                 shortage(choice, runs, trialStock, trialMissing, path, depth + 1);
             }
             trialStock.merge(item, runs * recipe.count - quantity, Math::addExact);
+            recipe.remainders.forEach((id,n)->trialStock.merge(id,Math.multiplyExact(runs,n),Math::addExact));
             long cost = trialMissing.values().stream().mapToLong(Integer::longValue).sum();
             if (cost < bestCost) { bestCost = cost; bestMissing = trialMissing; bestStock = trialStock; }
         }

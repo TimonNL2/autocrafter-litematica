@@ -95,6 +95,74 @@ public class WorkshopGameTest implements FabricClientGameTest {
                 if(WorkshopClient.INSTANCE.executor.state!=WorkshopExecutor.State.STOPPED || !WorkshopClient.INSTANCE.executor.detail.contains("Storage changed"))throw new AssertionError("Changed source was not rejected");
                 for(int i=0;i<36;i++)if(!mc.player.getInventory().getItem(i).isEmpty())throw new AssertionError("Changed storage moved items");
             });
+            // Packed source and output boxes must both return to their original chest slots.
+            server.runCommand("setblock 2 65 0 minecraft:chest");
+            server.runCommand("tp @a 0.5 65 0.5");
+            server.runOnServer(s->{
+                var input=(Container)s.overworld().getBlockEntity(new BlockPos(0,65,2));input.clearContent();
+                var source=new ItemStack(Items.SHULKER_BOX);
+                source.set(net.minecraft.core.component.DataComponents.CONTAINER,net.minecraft.world.item.component.ItemContainerContents.fromItems(List.of(new ItemStack(Items.IRON_BLOCK))));
+                input.setItem(3,source);
+                var output=(Container)s.overworld().getBlockEntity(new BlockPos(2,65,0));output.clearContent();output.setItem(5,new ItemStack(Items.SHULKER_BOX));
+            });
+            context.waitTicks(12);
+            context.runOnClient(mc->{var app=WorkshopClient.INSTANCE;app.config.staging=new WorkshopConfig.Point(0,65,-1);app.config.materials="minecraft:iron_ingot 12";app.scanner.begin();});
+            context.waitFor(mc->!WorkshopClient.INSTANCE.scanner.running,400);
+            context.runOnClient(mc->WorkshopClient.INSTANCE.scanner.beginBoxScan());
+            context.waitFor(mc->!WorkshopClient.INSTANCE.scanner.running,2000);
+            context.runOnClient(mc->{var app=WorkshopClient.INSTANCE;if(!app.scanner.complete)throw new AssertionError(String.join("\n",app.log));app.makePlan();app.executor.start();});
+            context.waitFor(mc->!WorkshopClient.INSTANCE.executor.busy(),2400);
+            context.runOnClient(mc->{
+                var app=WorkshopClient.INSTANCE;if(app.executor.state!=WorkshopExecutor.State.COMPLETE)throw new AssertionError(String.join("\n",app.log));
+                if(app.lastReport.stream().noneMatch(line->line.contains("requested 12, delivered 9, not completed 3")))throw new AssertionError("Missing partial completion report: "+app.lastReport);
+                if(java.nio.file.Files.exists(ShulkerAccess.recoveryPath(app)))throw new AssertionError("Recovery record remained after success");
+                for(int i=0;i<36;i++)if(!mc.player.getInventory().getItem(i).isEmpty())throw new AssertionError("Job inventory not empty after shulker return");
+            });
+            server.runOnServer(s->{
+                var input=(Container)s.overworld().getBlockEntity(new BlockPos(0,65,2));var output=(Container)s.overworld().getBlockEntity(new BlockPos(2,65,0));
+                if(!input.getItem(3).is(Items.SHULKER_BOX)||!output.getItem(5).is(Items.SHULKER_BOX))throw new AssertionError("Shulkers not returned to original slots");
+                var contents=output.getItem(5).get(net.minecraft.core.component.DataComponents.CONTAINER);
+                if(contents==null||contents.nonEmptyItemCopyStream().filter(item->item.is(Items.IRON_INGOT)).mapToInt(ItemStack::getCount).sum()!=9)throw new AssertionError("Output shulker must contain 9 ingots");
+                if(!s.overworld().getBlockState(new BlockPos(0,65,-1)).isAir())throw new AssertionError("Staged box not recovered");
+            });
+            // One item per box: two different targets use different reserved output slots.
+            server.runCommand("tp @a 0.5 65 0.5");
+            server.runOnServer(s->{
+                var input=(Container)s.overworld().getBlockEntity(new BlockPos(0,65,2));input.clearContent();input.setItem(0,new ItemStack(Items.IRON_INGOT,2));input.setItem(1,new ItemStack(Items.GOLD_INGOT,3));
+                var output=(Container)s.overworld().getBlockEntity(new BlockPos(2,65,0));output.clearContent();output.setItem(4,new ItemStack(Items.SHULKER_BOX));output.setItem(7,new ItemStack(Items.SHULKER_BOX));
+            });
+            context.waitTicks(12);
+            context.runOnClient(mc->{var app=WorkshopClient.INSTANCE;app.config.oneItemPerBox=true;app.config.materials="minecraft:iron_ingot 2\nminecraft:gold_ingot 3";app.scanner.begin();});
+            context.waitFor(mc->!WorkshopClient.INSTANCE.scanner.running,400);
+            context.runOnClient(mc->WorkshopClient.INSTANCE.scanner.beginBoxScan());
+            context.waitFor(mc->!WorkshopClient.INSTANCE.scanner.running,2000);
+            context.runOnClient(mc->{var app=WorkshopClient.INSTANCE;if(!app.scanner.complete)throw new AssertionError(String.join("\n",app.log));app.makePlan();app.executor.start();});
+            context.waitFor(mc->!WorkshopClient.INSTANCE.executor.busy(),2000);
+            context.runOnClient(mc->{if(WorkshopClient.INSTANCE.executor.state!=WorkshopExecutor.State.COMPLETE)throw new AssertionError(String.join("\n",WorkshopClient.INSTANCE.log));});
+            server.runOnServer(s->{
+                var output=(Container)s.overworld().getBlockEntity(new BlockPos(2,65,0));int iron=0,gold=0;
+                for(int slot:new int[]{4,7}) {
+                    var box=output.getItem(slot);if(!box.is(Items.SHULKER_BOX))throw new AssertionError("Sorted box missing");
+                    var contents=box.get(net.minecraft.core.component.DataComponents.CONTAINER).nonEmptyItemCopyStream().toList();
+                    if(contents.size()!=1)throw new AssertionError("Mixed items in a single-item box");
+                    if(contents.getFirst().is(Items.IRON_INGOT))iron+=contents.getFirst().getCount();
+                    if(contents.getFirst().is(Items.GOLD_INGOT))gold+=contents.getFirst().getCount();
+                }
+                if(iron!=2||gold!=3)throw new AssertionError("Sorted output quantities incorrect");
+            });
+            // Interrupt a physical scan with a box placed, then recover from the durable record.
+            server.runCommand("tp @a 0.5 65 0.5");context.waitTicks(10);
+            context.runOnClient(mc->WorkshopClient.INSTANCE.scanner.begin());
+            context.waitFor(mc->!WorkshopClient.INSTANCE.scanner.running,400);
+            context.runOnClient(mc->WorkshopClient.INSTANCE.scanner.beginBoxScan());
+            context.waitFor(mc->mc.player.containerMenu instanceof net.minecraft.world.inventory.ShulkerBoxMenu && WorkshopClient.contentReceived(mc.player.containerMenu.containerId),400);
+            context.runOnClient(mc->{var app=WorkshopClient.INSTANCE;app.scanner.stop("Simulated interrupted inspection");app.recoverShulker();});
+            context.waitFor(mc->!WorkshopClient.INSTANCE.recovering(),1200);
+            context.runOnClient(mc->{var app=WorkshopClient.INSTANCE;if(java.nio.file.Files.exists(ShulkerAccess.recoveryPath(app)))throw new AssertionError("Interrupted box recovery failed: "+String.join("\n",app.log));});
+            server.runOnServer(s->{
+                var output=(Container)s.overworld().getBlockEntity(new BlockPos(2,65,0));
+                if(!output.getItem(4).is(Items.SHULKER_BOX)||!output.getItem(7).is(Items.SHULKER_BOX)||!s.overworld().getBlockState(new BlockPos(0,65,-1)).isAir())throw new AssertionError("Recovery did not restore original box slots");
+            });
         }
     }
     private static void runJob(ClientGameTestContext context,String materials) {

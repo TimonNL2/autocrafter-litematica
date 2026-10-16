@@ -2,6 +2,21 @@
 
 Every published version has an immutable Git tag and a GitHub Release with a mod JAR, source JAR and SHA-256 checksums. Older versions remain available on the [Releases page](https://github.com/TimonNL2/autocrafter-litematica/releases).
 
+## 0.2.0-beta.1 — 2026-10-16
+
+- Packed shulker lifecycle: reserve an original slot, place at Staging, open, recover with normal survival mining/pickup, and return to the same slot.
+- Reviewed physical inspection when closed box contents are unknown; scan-only/automatic settings.
+- Empty output shulkers, mixed output or one item type per reserved container.
+- Durable shulker recovery records and an explicit Recover box action after interruptions.
+- Pause and safe stop return the active shulker before yielding.
+- Removed the nine-source-stack limit. Inventory capacity is still checked before moving anything; jobs requiring more than 27 occupied slots must be split.
+- English completion report with requested/delivered/uncompleted quantities and a combined raw-material shopping list, available in Activity, clipboard and a local text file.
+- Fixed shortages reusing stock already allocated to later targets and double-counting recipe batch surplus.
+- Read fixed item crafting remainders as well as explicit recipe-display remainders, including nested displays, before reserving output space.
+- Expanded real-client tests for packed source/output boxes, partial completion reports, output sorting and interrupted-box recovery.
+
+The alpha tag and downloads remain unchanged. This beta has local integrated-server validation; dedicated-server latency validation remains outstanding. Other workstations and storage pathfinding remain outside this release.
+
 ## 0.1.0-alpha.1 — 2026-10-16
 
 First experimental Minecraft Java 26.3 / Fabric release.

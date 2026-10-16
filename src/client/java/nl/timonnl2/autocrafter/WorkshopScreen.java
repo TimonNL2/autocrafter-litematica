@@ -15,7 +15,7 @@ public final class WorkshopScreen extends Screen {
     private static final String[] TABS={"Materials","Storage","Plan","Activity","Settings"};
     private final WorkshopClient app;
     private int tab, scroll;
-    private boolean preview;
+    private boolean preview, boxPreview, showReport;
     private boolean listView,planDetails;
     private MultiLineEditBox editor;
     private int left, top, contentWidth, bottom;
@@ -55,6 +55,7 @@ public final class WorkshopScreen extends Screen {
                 if(app.executor.busy()) {notice="Stop the active task before editing regions.";return;}
                 if(!app.config.regions.isEmpty()) {app.config.regions.removeLast();app.save();app.plan=null;app.scanner.complete=false;}
             },false);
+            button(left+210,bottom-28,98,24,boxPreview?"Confirm scan":"Inspect boxes","Review physical shulker inspection before moving boxes",()->safe(()->{if(boxPreview){app.scanner.beginBoxScan();boxPreview=false;}else{boxPreview=true;scroll=0;}rebuildWidgets();}),boxPreview);
         } else if(tab==2) {
             button(left,bottom-28,80,24,"Build plan","Compute an achievable plan from the latest scan",()->safe(()->{saveEditor();app.makePlan();preview=false;}),true);
             button(left+88,bottom-28,88,24,preview?"Confirm start":"Review moves","Review all source transfers and preflight checks before starting",()->safe(()->{
@@ -66,14 +67,26 @@ public final class WorkshopScreen extends Screen {
         } else if(tab==3) {
             button(left,bottom-28,70,24,"Pause","Pause after the current server-verified transaction",()->app.executor.pause(),false);
             button(left+78,bottom-28,72,24,"Resume","Revalidate job inventory and continue",()->safe(()->app.executor.resume()),true);
-            button(left+158,bottom-28,82,24,"Safe stop","Stop issuing actions; keep job items available for recovery",()->{app.scanner.stop("Scan stopped.");app.executor.stop("Stopped by user");},false);
+            button(left+158,bottom-28,82,24,"Safe stop","Finish the current transaction and return the active shulker",()->{app.scanner.requestStop();app.executor.requestStop();},false);
             button(left+248,bottom-28,64,24,"Copy log","Copy the activity log to the clipboard",()->minecraft.keyboardHandler.setClipboard(String.join("\n",app.log)),false);
+            button(left,bottom-56,96,24,showReport?"Show activity":"Result report","Requested, delivered and outstanding items, with raw material shortages",()->{showReport=!showReport;scroll=0;rebuildWidgets();},false);
+            button(left+104,bottom-56,96,24,"Copy report","Copy the last completed job report",()->minecraft.keyboardHandler.setClipboard(String.join("\n",app.lastReport)),false);
+            button(left+208,bottom-56,104,24,"Recover box","Return a shulker from an interrupted operation to its recorded slot",()->safe(app::recoverShulker),false);
         } else {
             int settingsWidth=(contentWidth-32)/2;
             button(left+12,top+24,settingsWidth,24,"Outlines: "+(app.config.showRegions?"on":"off"),"Show selected region borders, corners and labels",()->{app.config.showRegions=!app.config.showRegions;app.save();rebuildWidgets();},false);
             button(left+20+settingsWidth,top+24,settingsWidth,24,"Delay: "+app.config.delayTicks+" ticks","Cycle between 8, 12, 20 and 40 ticks",()->{
                 app.config.delayTicks=app.config.delayTicks==8?12:app.config.delayTicks==12?20:app.config.delayTicks==20?40:8;app.save();rebuildWidgets();
             },false);
+            button(left+12,top+54,settingsWidth,24,"Shulkers: "+(app.config.handleShulkers?"automatic":"scan only"),"Allow reserved packed shulkers to supply ingredients and receive output",()->safe(()->{
+                if(app.executor.busy()||app.scanner.running)throw new IllegalArgumentException("Stop the current operation before changing shulker settings.");
+                app.config.handleShulkers=!app.config.handleShulkers;app.scanner.rebuildStock();app.plan=null;app.save();rebuildWidgets();
+            }),false);
+            button(left+20+settingsWidth,top+54,settingsWidth,24,app.config.oneItemPerBox?"Output: one item":"Output: mixed","Reserve a separate empty output container per item type, or allow mixed items",()->safe(()->{
+                if(app.executor.busy())throw new IllegalArgumentException("Stop the current task before changing output rules.");
+                app.config.oneItemPerBox=!app.config.oneItemPerBox;app.save();rebuildWidgets();
+            }),false);
+
         }
     }
     private void validate() {
@@ -99,7 +112,7 @@ public final class WorkshopScreen extends Screen {
         g.fill(0,0,width,2,MINT);
         g.text(font,"AUTOCRAFTER",left,15,TEXT,false);
         g.text(font,"WORKSHOP / 26.3",left+94,16,MUTED,false);
-        String badge="ALPHA 0.1";g.text(font,badge,width-16-font.width(badge),16,AMBER,false);
+        String badge="BETA 0.2";g.text(font,badge,width-16-font.width(badge),16,AMBER,false);
         int card=(contentWidth-16)/3;
         stat(g,left,76,card,"STORAGE",app.scanner.complete?app.scanner.containers.size()+" scanned":"Scan required");
         stat(g,left+card+8,76,card,"RECIPES",app.catalog.layouts.size()+" known");
@@ -124,13 +137,20 @@ public final class WorkshopScreen extends Screen {
     private void panel(GuiGraphicsExtractor g,int x,int y,int w,int h) {g.fill(x,y,x+w,y+h,PANEL);g.outline(x,y,w,h,EDGE);}
     private void renderStorage(GuiGraphicsExtractor g) {
         List<String> lines=new ArrayList<>();
+        if(boxPreview){
+            lines.add("REVIEW PHYSICAL SHULKER INSPECTION");
+            lines.add("Each packed box will be taken from its slot, placed at Staging, opened, mined, picked up and returned to the same slot. Contents will not be transferred.");
+            for(var c:app.scanner.containers)if(c.packed())lines.add(c.kind()+" "+c.label());
+            lines.add("Keep your main inventory empty and stand beside the staging position. Confirm scan authorizes these movements.");
+            lines(g,lines,top+34,bottom-36);return;
+        }
         lines.add("REGIONS  /  select corners with U");
         for(var r:app.config.regions) lines.add(r.kind()+"   "+r.min().toShortString()+"  ->  "+r.max().toShortString());
         if(app.config.regions.isEmpty()) lines.add("Add Input, Output and Work regions to begin.");
         lines.add("");lines.add("CONTAINERS  /  server-confirmed contents");
-        for(var c:app.scanner.containers) lines.add(c.kind()+"   "+c.pos().toShortString()+"   "+c.items().stream().filter(s->!s.isEmpty()).count()+" occupied slots");
+        for(var c:app.scanner.containers) lines.add(c.kind()+"   "+c.label()+"   "+(c.known()?c.items().stream().filter(s->!s.isEmpty()).count()+" occupied slots":"contents unknown"));
         lines.addAll(app.scanner.shulkers);lines.add("");
-        lines.add("Packed shulkers are inspection-only. Place them in a selected region to use their contents.");
+        lines.add("Packed shulkers use the selected staging position. Inspect boxes when the server does not disclose their contents.");
         lines(g,lines,top+34,bottom-36);
     }
     private void renderPlan(GuiGraphicsExtractor g) {
@@ -155,9 +175,10 @@ public final class WorkshopScreen extends Screen {
         lines(g,lines,top,bottom-36);
     }
     private void renderActivity(GuiGraphicsExtractor g) {
+        if(showReport){lines(g,app.lastReport.isEmpty()?List.of("No completed task report yet. Plan > Details shows current shortages."):app.lastReport,top,bottom-64);return;}
         List<String> lines=new ArrayList<>();lines.add(app.executor.detail);lines.add("Verified crafts: "+app.executor.completedCrafts);lines.add("");
         List<String> reversed=new ArrayList<>(app.log);Collections.reverse(reversed);lines.addAll(reversed);
-        lines(g,lines,top,bottom-36);
+        lines(g,lines,top,bottom-64);
     }
     private void renderTargets(GuiGraphicsExtractor g,int y,int end) {
         var entries=MaterialList.parse(app.config.materials,RecipeCatalog::resolve).entries();
@@ -183,8 +204,8 @@ public final class WorkshopScreen extends Screen {
     private void renderSettings(GuiGraphicsExtractor g) {
         panel(g,left,top,contentWidth,bottom-top);
         g.text(font,"WORKSHOP PREFERENCES",left+12,top+12,MINT,false);
-        List<String> lines=List.of("Personal inventory: protected; empty job buffer required.","Shulkers: inspect packed boxes; use placed boxes as storage.","Automatic box placement / mining: unavailable in this alpha.","Output: products, surplus and remainders go to the reviewed output.","Configuration and recovery logs stay on this computer.","No telemetry. No server mod. No Litematica dependency.");
-        lines(g,lines,top+56,bottom-4);
+        List<String> lines=List.of("Personal inventory: protected; empty job buffer required.","Shulkers: automatic placement, opening, recovery and return.","Stand beside a clear staging block on a solid floor.","Output: products, surplus and remainders go to the reviewed output.","Configuration, result reports and recovery logs stay on this computer.","No telemetry. No server mod. No Litematica dependency.");
+        lines(g,lines,top+86,bottom-4);
     }
     private void lines(GuiGraphicsExtractor g,List<String> lines,int y,int end) {
         g.enableScissor(left,y,left+contentWidth,end);

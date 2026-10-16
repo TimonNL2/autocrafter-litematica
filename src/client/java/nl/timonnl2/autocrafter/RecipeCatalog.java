@@ -10,6 +10,19 @@ import nl.timonnl2.autocrafter.core.Planner;
 import java.util.*;
 
 public final class RecipeCatalog {
+    private record DisplayItem(ItemStack stack,ItemStack remainder,boolean supported) {}
+    private static final class DisplayReader implements DisplayContentsFactory.ForStacks<DisplayItem>,DisplayContentsFactory.ForRemainders<DisplayItem> {
+        public DisplayItem forStack(ItemStack stack){
+            var template=stack.getItem().getCraftingRemainder();
+            ItemStack remainder=template==null?ItemStack.EMPTY:template.create();
+            return new DisplayItem(stack,remainder,remainder.isEmpty()||plain(remainder));
+        }
+        public DisplayItem addRemainder(DisplayItem input,List<DisplayItem> remainders){
+            if(remainders.size()!=1)return new DisplayItem(input.stack(),ItemStack.EMPTY,false);
+            var remainder=remainders.getFirst();
+            return new DisplayItem(input.stack(),remainder.stack(),input.supported()&&remainder.supported()&&remainder.remainder().isEmpty()&&(remainder.stack().isEmpty()||plain(remainder.stack())));
+        }
+    }
     public record Layout(RecipeDisplayId displayId, List<Integer> gridSlots, Planner.Recipe recipe) {}
     public final Map<String, Layout> layouts = new LinkedHashMap<>();
     public final List<String> excluded = new ArrayList<>();
@@ -46,13 +59,11 @@ public final class RecipeCatalog {
             for (int i=0; i<displays.size(); i++) {
                 SlotDisplay display = displays.get(i);
                 if (display instanceof SlotDisplay.Empty) continue;
-                if (display instanceof SlotDisplay.WithRemainder remainder) {
-                    var rests = remainder.remainder().resolveForStacks(context);
-                    if (rests.size() != 1) { supported = false; break; }
-                    if (!rests.getFirst().isEmpty()) remainders.merge(id(rests.getFirst()), rests.getFirst().getCount(), Integer::sum);
-                    display = remainder.input();
-                }
-                List<ItemStack> options = display.resolveForStacks(context);
+                var resolved=display.resolve(context,new DisplayReader()).toList();
+                if(resolved.isEmpty()||resolved.stream().anyMatch(option->!option.supported()||!ItemStack.matches(option.remainder(),resolved.getFirst().remainder()))){supported=false;break;}
+                var remainder=resolved.getFirst().remainder();
+                if(!remainder.isEmpty())remainders.merge(id(remainder),remainder.getCount(),Integer::sum);
+                List<ItemStack> options = resolved.stream().map(DisplayItem::stack).toList();
                 if (options.isEmpty() || options.stream().anyMatch(s -> s.isEmpty() || !plain(s))) { supported=false; break; }
                 ingredients.add(new Planner.Ingredient(options.stream().map(RecipeCatalog::id).distinct().toList()));
                 slots.add(positions.get(i));

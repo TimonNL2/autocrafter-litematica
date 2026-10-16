@@ -6,6 +6,19 @@ import static org.junit.jupiter.api.Assertions.*;
 import static nl.timonnl2.autocrafter.core.Planner.Ingredient.of;
 
 class PlannerTest {
+    @Test void shortagesDoNotReuseIngredientsAllocatedToLaterTargets() {
+        var p=new Planner(List.of(recipe("a","a",1,of("iron"),of("diamond")),recipe("b","b",1,of("iron"))));
+        var plan=p.plan(List.of(request("a",1),request("b",1)),Map.of("iron",1));
+        assertEquals(Map.of("iron",1,"diamond",1),plan.targets().getFirst().missing());
+        assertEquals(1,plan.targets().get(1).available());
+    }
+    @Test void shortageShoppingListSharesBatchSurplusAcrossTargets() {
+        var p=new Planner(List.of(recipe("planks","plank",4,of("log")),recipe("sticks","stick",4,of("plank"),of("plank"))));
+        var plan=p.plan(List.of(request("stick",4),request("plank",2)),Map.of());
+        assertEquals(Map.of("log",1),plan.targets().getFirst().missing());
+        assertTrue(plan.targets().get(1).missing().isEmpty());
+        assertEquals(0,plan.targets().get(1).available());
+    }
     private Planner.Recipe recipe(String id,String result,int count,Planner.Ingredient... slots) {return new Planner.Recipe(id,result,count,List.of(slots),Map.of());}
     private MaterialList.Entry request(String item,int count) {return new MaterialList.Entry(item,count);}
     @Test void recursiveCraftingUsesBatchRemainders() {

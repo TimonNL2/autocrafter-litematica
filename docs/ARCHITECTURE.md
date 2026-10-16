@@ -17,4 +17,8 @@ Recipe and UI adapters are compiled against the actual unobfuscated Minecraft 26
 
 Shulkers require an explicit choice between inspection and handling. Missing component contents means unknown, never empty. Placing, mining, collecting and returning a box requires a separately validated lifecycle; do not silently treat a chest containing boxes as loose item stock.
 
-Inventory actions are fail-closed: no dropping, personal-stack consumption, hidden retry, or blind continuation after a changed menu. Automatic walking is outside the initial scope; the player must make each selected container reachable.
+Inventory actions are fail-closed: no dropping, personal-stack consumption, hidden retry, or blind continuation after a changed menu. There is no pathfinding between storage containers; the player must make each selected container reachable. Shulker pickup may use a short normal movement toward Staging, followed by a return to the previous standing position.
+
+Packed boxes are virtual storage references keyed by the original chest position and slot. A single ShulkerAccess state machine owns the active box, verifies each chest transaction through a server reopen, persists its expected contents before actions, and returns it to the original reserved slot. Unknown contents require the separately reviewed physical scan. Failures preserve the recovery record; recovery is an explicit user action and rejects occupied slots or changed contents.
+
+The completed task report is bound to the approved plan, independent of later material-list edits. Shortages are evaluated after all achievable targets have reserved stock, with shared virtual stock and batch surplus for the remaining targets. This produces one combined shopping list for the selected known recipes.
