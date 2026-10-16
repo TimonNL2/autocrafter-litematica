@@ -2,6 +2,13 @@
 
 Every published version has an immutable Git tag and a GitHub Release with a mod JAR, source JAR and SHA-256 checksums. Older versions remain available on the [Releases page](https://github.com/TimonNL2/autocrafter-litematica/releases).
 
+## 0.2.0-beta.2 — 2026-10-16
+
+- Select region boxes with left-click for the first corner and right-click for the second corner.
+- Left-click can replace the first corner before saving. Either button selects a staging support block.
+- Selection clicks are consumed before mining, item use or container opening. Normal mouse controls remain unchanged outside selection mode; U remains available.
+- Updated English tooltips and setup instructions, with a real-client mouse-event regression check.
+
 ## 0.2.0-beta.1 — 2026-10-16
 
 - Packed shulker lifecycle: reserve an original slot, place at Staging, open, recover with normal survival mining/pickup, and return to the same slot.

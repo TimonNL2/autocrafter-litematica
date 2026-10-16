@@ -17,10 +17,10 @@ Use the JAR without `-sources` in its name. Litematica is optional. The server d
 
 ## Set up your craft room
 
-1. In **Storage**, choose **+ Input**. Aim at a corner block and press **U**, then do the same at the opposite corner. Select both halves of double chests. Repeat for additional regions.
+1. In **Storage**, choose **+ Input**. Left-click the first corner block, then right-click the opposite corner. Left-click again to replace the first corner before finishing. Selection clicks do not mine blocks or open containers. The **U** key remains available as an alternative. Select both halves of double chests. Repeat for additional regions.
 2. Select an **Output** region containing an empty chest, barrel, placed shulker, or a chest containing empty output shulkers, then a **Work** region containing a crafting table.
 3. Keep the selected containers and table within normal reach, unobstructed and loaded. There is no pathfinding between storage containers. Shulker pickup may take a short step toward Staging.
-4. For packed shulkers, mark a **Staging** position by aiming at a solid non-interactive support block and pressing **U**. Keep the block above it and the next block clear. Stand beside it on the same floor, within 1.6 blocks of its centre. Keep hoppers, fluids, fire and cactus away.
+4. For packed shulkers, mark a **Staging** position by clicking a solid non-interactive support block. Keep the block above it and the next block clear. Stand beside it on the same floor, within 1.6 blocks of its centre. Keep hoppers, fluids, fire and cactus away.
 5. Open **Materials**, type a list or import it from the clipboard, then **Save list**. Plain lines, CSV and Litematica-style text tables are supported. Export totals are used, not the export's missing column.
 
 ```text
@@ -76,7 +76,7 @@ cd autocrafter-litematica
 ./gradlew build
 ```
 
-The mod is at `build/libs/autocrafter-litematica-0.2.0-beta.1.jar`. Sources and test reports are generated alongside the build. Run `./gradlew runClient` for a development client or `./gradlew runClientGameTest` for the real-client smoke/integration test.
+The mod is at `build/libs/autocrafter-litematica-0.2.0-beta.2.jar`. Sources and test reports are generated alongside the build. Run `./gradlew runClient` for a development client or `./gradlew runClientGameTest` for the real-client smoke/integration test.
 
 Minecraft 26.3 is unobfuscated; the project uses the game's actual class names without Yarn mappings. Pinned versions are in `gradle.properties`. The wrapper checksum is pinned too.
 

@@ -76,10 +76,20 @@ public final class WorkshopClient implements ClientModInitializer {
     }
     public void save() { try { config.save(world); } catch(Exception e) { log("Could not save configuration: " + e.getMessage()); } }
     public void select(Minecraft mc) {
-        if(selection==null || mc.player==null || !(mc.hitResult instanceof BlockHitResult hit) || executor.busy() || scanner.running || recovering()) return;
+        selectCorner(mc,corner==null);
+    }
+    public boolean selectWithMouse(Minecraft mc,int button) {
+        if(selection==null||mc.gui.screen()!=null||mc.player==null||!mc.mouseHandler.isMouseGrabbed())return false;
+        if(button!=InputConstants.MOUSE_BUTTON_LEFT&&button!=InputConstants.MOUSE_BUTTON_RIGHT)return false;
+        selectCorner(mc,button==InputConstants.MOUSE_BUTTON_LEFT);
+        return true;
+    }
+    private void selectCorner(Minecraft mc,boolean first) {
+        if(selection==null || mc.player==null || !(mc.hitResult instanceof BlockHitResult hit) || hit.getType()!=net.minecraft.world.phys.HitResult.Type.BLOCK || executor.busy() || scanner.running || recovering()) return;
         BlockPos pos=hit.getBlockPos();
         if(selection.equals("Staging")) { config.staging=WorkshopConfig.Point.of(pos.above()); selection=null; save(); log("Shulker staging position saved above the selected block."); return; }
-        if(corner==null) { corner=pos.immutable(); mc.gui.hud.setOverlayMessage(Component.literal("First corner saved. Aim at the other corner and press U."),false); return; }
+        if(first) { corner=pos.immutable(); mc.gui.hud.setOverlayMessage(Component.literal("First corner saved. Right-click the second corner. Left-click to move the first corner."),false); return; }
+        if(corner==null){mc.gui.hud.setOverlayMessage(Component.literal("Left-click the first corner before choosing the second corner."),false);return;}
         var region=new WorkshopConfig.Region(selection,WorkshopConfig.Point.of(corner),WorkshopConfig.Point.of(pos));
         if(region.volume()>32768) { log("Selection too large. Maximum: 32,768 blocks."); corner=null; return; }
         if(config.regions.size()>=64) { log("Maximum 64 regions. Remove a region first."); return; }

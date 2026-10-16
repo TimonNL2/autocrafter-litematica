@@ -37,6 +37,22 @@ public class WorkshopGameTest implements FabricClientGameTest {
             server.runOnServer(s->((ChestBlockEntity)s.overworld().getBlockEntity(new BlockPos(0,65,2))).setItem(0,new ItemStack(Items.IRON_BLOCK)));
             context.waitTicks(30);
             context.runOnClient(mc->{
+                var app=WorkshopClient.INSTANCE;app.config=new WorkshopConfig();app.selection="Input";app.corner=null;
+                mc.gui.setScreen(null);mc.mouseHandler.grabMouse();
+                var a=new BlockPos(0,65,2);var b=new BlockPos(2,65,0);
+                mc.hitResult=new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(a),net.minecraft.core.Direction.UP,a,false);
+                mc.mouseHandler.onButton(mc.getWindow().handle(),new MouseButtonInfo(InputConstants.MOUSE_BUTTON_RIGHT,0),1);
+                if(app.corner!=null||!app.config.regions.isEmpty())throw new AssertionError("Right click must wait for the first corner");
+                mc.mouseHandler.onButton(mc.getWindow().handle(),new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT,0),1);
+                if(!a.equals(app.corner))throw new AssertionError("Left click did not set first corner");
+                mc.hitResult=new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(b),net.minecraft.core.Direction.UP,b,false);
+                mc.mouseHandler.onButton(mc.getWindow().handle(),new MouseButtonInfo(InputConstants.MOUSE_BUTTON_RIGHT,0),1);
+                if(app.config.regions.size()!=1||app.selection!=null||!app.config.regions.getFirst().contains(a)||!app.config.regions.getFirst().contains(b))throw new AssertionError("Right click did not save the selected box");
+                if(mc.options.keyAttack.isDown()||mc.options.keyUse.isDown())throw new AssertionError("Selection click reached vanilla block interaction");
+                mc.mouseHandler.onButton(mc.getWindow().handle(),new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT,0),0);
+                mc.mouseHandler.onButton(mc.getWindow().handle(),new MouseButtonInfo(InputConstants.MOUSE_BUTTON_RIGHT,0),0);
+            });
+            context.runOnClient(mc->{
                 var app=WorkshopClient.INSTANCE;
                 app.config=new WorkshopConfig();app.config.materials="minecraft:iron_ingot 9";
                 app.config.regions.add(region("Input",0,65,2));app.config.regions.add(region("Output",2,65,0));app.config.regions.add(region("Work",-2,65,0));

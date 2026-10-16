@@ -23,3 +23,5 @@ The client test opens each dashboard page, captures screenshots and creates a te
 Automated local integration is not proof of compatibility with every server plugin or every recipe. A server mismatch stops execution. A stopped task may leave owned ingredients in the craft grid or player inventory; the log identifies the last intended and confirmed action. Box recovery is explicitly requested in Activity and refuses changed contents or an occupied original slot. Other job recovery is manual.
 
 The expanded integration test also physically inspects packed boxes, crafts from a packed input into a packed output, checks a 12-requested / 9-delivered / 3-uncompleted report, sorts iron and gold into separate boxes, and interrupts a placed-box inspection before recovering from its persisted record. Assertions inspect server storage, exact original slots and the cleared staging position.
+
+Mouse selection regression: the client test sends real MouseHandler button events, checks that right-click waits for a first corner, saves a region using left/right clicks, and verifies that attack/use bindings were not activated.

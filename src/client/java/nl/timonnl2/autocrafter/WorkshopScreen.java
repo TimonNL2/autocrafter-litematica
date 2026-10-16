@@ -45,10 +45,10 @@ public final class WorkshopScreen extends Screen {
         } else if(tab==1) {
             int bw=(contentWidth-24)/4;
             String[] kinds={"Input","Output","Work","Staging"};
-            for(int i=0;i<4;i++) { String kind=kinds[i]; button(left+i*(bw+8),top,bw,23,"+ "+kind,"Aim at blocks and press U to select corners",()->{
+            for(int i=0;i<4;i++) { String kind=kinds[i]; button(left+i*(bw+8),top,bw,23,"+ "+kind,"Left-click the first corner, right-click the second corner",()->{
                 if(app.executor.busy()) {notice="Stop the active task before editing regions.";return;}
                 app.selection=kind;app.corner=null;onClose();
-                minecraft.gui.hud.setOverlayMessage(Component.literal(kind.equals("Staging")?"Aim at a support block and press U.":"Aim at the first corner block and press U, then the second corner."),false);
+                minecraft.gui.hud.setOverlayMessage(Component.literal(kind.equals("Staging")?"Click the support block to set Staging.":"Left-click the first corner block, then right-click the second corner."),false);
             },false); }
             button(left,bottom-28,88,24,"Scan storage","Opens selected containers; does not move items",()->safe(()->app.scanner.begin()),true);
             button(left+96,bottom-28,106,24,"Remove last region","Remove the most recently added region",()->{
@@ -112,7 +112,7 @@ public final class WorkshopScreen extends Screen {
         g.fill(0,0,width,2,MINT);
         g.text(font,"AUTOCRAFTER",left,15,TEXT,false);
         g.text(font,"WORKSHOP / 26.3",left+94,16,MUTED,false);
-        String badge="BETA 0.2";g.text(font,badge,width-16-font.width(badge),16,AMBER,false);
+        String badge="0.2 BETA 2";g.text(font,badge,width-16-font.width(badge),16,AMBER,false);
         int card=(contentWidth-16)/3;
         stat(g,left,76,card,"STORAGE",app.scanner.complete?app.scanner.containers.size()+" scanned":"Scan required");
         stat(g,left+card+8,76,card,"RECIPES",app.catalog.layouts.size()+" known");
@@ -144,7 +144,7 @@ public final class WorkshopScreen extends Screen {
             lines.add("Keep your main inventory empty and stand beside the staging position. Confirm scan authorizes these movements.");
             lines(g,lines,top+34,bottom-36);return;
         }
-        lines.add("REGIONS  /  select corners with U");
+        lines.add("REGIONS  /  left-click first, right-click second");
         for(var r:app.config.regions) lines.add(r.kind()+"   "+r.min().toShortString()+"  ->  "+r.max().toShortString());
         if(app.config.regions.isEmpty()) lines.add("Add Input, Output and Work regions to begin.");
         lines.add("");lines.add("CONTAINERS  /  server-confirmed contents");
